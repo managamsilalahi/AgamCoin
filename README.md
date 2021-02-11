@@ -3,3 +3,6 @@
 
 ## Part 1
 https://youtu.be/zVqczFZr124
+
+## Part 2
+https://youtu.be/zVqczFZr124
