@@ -3,14 +3,15 @@ import elliptic from 'elliptic'
 const ec = new elliptic.ec('secp256k1')
 
 export class Transaction {
-    constructor(fromAddress, toAddress, amount) {
+    constructor(fromAddress, toAddress, amount, timestamp) {
         this.fromAddress = fromAddress
         this.toAddress = toAddress
         this.amount = amount
+        this.timestamp = timestamp
     }
 
     calculateHash() {
-        return SHA256(this.fromAddress + this.toAddress + this.amount).toString()
+        return SHA256(this.fromAddress + this.toAddress + this.amount + this.timestamp).toString()
     }
 
     signTransaction(signingKey) {
@@ -85,7 +86,7 @@ export class Blockchain {
     }
 
     minePendingTransactions(miningRewardAddress) {
-        const rewardTx = new Transaction(null, miningRewardAddress, this.miningReward)
+        const rewardTx = new Transaction(null, miningRewardAddress, this.miningReward, Date.now())
         this.pendingTransactions.push(rewardTx)
         
         let block = new Block(Date.now(), this.pendingTransactions, this.getLatestBlock().hash)
