@@ -1,14 +1,42 @@
 import SHA256 from 'crypto-js/sha256.js'
+import elliptic from 'elliptic'
+const ec = new elliptic.ec('secp256k1')
 
-class Transaction {
-    constructor(fromAddress, toAddress, amount) {
+export class Transaction {
+    constructor(fromAddress, toAddress, amount, timestamp) {
         this.fromAddress = fromAddress
         this.toAddress = toAddress
         this.amount = amount
+        this.timestamp = timestamp
+    }
+
+    calculateHash() {
+        return SHA256(this.fromAddress + this.toAddress + this.amount + this.timestamp).toString()
+    }
+
+    signTransaction(signingKey) {
+        if (signingKey.getPublic('hex') !== this.fromAddress) {
+            throw new Error('You cannot sign transaction for other wallets!')
+        }
+        
+        const hashTx = this.calculateHash()
+        const sig = signingKey.sign(hashTx, 'base64')
+        this.signature = sig.toDER('hex')
+    }
+
+    isValid() {
+        if (this.fromAddress === null) {
+            return true
+        } else if (!this.signature || this.signature.length === 0) {
+            throw Error('No signature in this transaction')
+        }
+
+        const publicKey = ec.keyFromPublic(this.fromAddress, 'hex')
+        return publicKey.verify(this.calculateHash(), this.signature)
     }
 }
 
-class Block {
+export class Block {
     constructor(timestamp, transactions, previousHash = '') {
         this.timestamp = timestamp
         this.transactions = transactions
@@ -29,9 +57,19 @@ class Block {
 
         console.log('Block mined: ' + this.hash)
     }
+
+    hasValidTransactions() {
+        for (const transaction of this.transactions) {
+            if (!transaction.isValid()) {
+                return false
+            }
+        }
+
+        return true
+    }
 }
 
-class Blockchain {
+export class Blockchain {
     constructor() {
         this.chain = [this.createGenesisBlock()]
         this.difficulty = 2
@@ -40,7 +78,7 @@ class Blockchain {
     }
 
     createGenesisBlock() {
-        return new Block('01/01/2021', 'Genesis Block', '0')
+        return new Block(Date.parse('2021-01-01'), [], '0')
     }
 
     getLatestBlock() {
@@ -48,18 +86,25 @@ class Blockchain {
     }
 
     minePendingTransactions(miningRewardAddress) {
-        let block = new Block(Date.now(), this.pendingTransactions)
+        const rewardTx = new Transaction(null, miningRewardAddress, this.miningReward, Date.now())
+        this.pendingTransactions.push(rewardTx)
+        
+        let block = new Block(Date.now(), this.pendingTransactions, this.getLatestBlock().hash)
         block.mine(this.difficulty)
 
         console.log('Block successfully mined!')
         this.chain.push(block)
 
-        this.pendingTransactions = [
-            new Transaction(null, miningRewardAddress, this.miningReward)
-        ]
+        this.pendingTransactions = []
     }
 
-    createTransaction(transaction) {
+    addTransaction(transaction) {
+        if (!transaction.fromAddress || !transaction.toAddress) {
+            throw new Error('Transactin must include from and to address')
+        } else if (!transaction.isValid()) {
+            throw new Error('Cannot add invalid transaction to the chain')
+        }
+        
         this.pendingTransactions.push(transaction)
     }
 
@@ -84,7 +129,8 @@ class Blockchain {
             const currentBlock = this.chain[i]
             const previousBlock = this.chain[i - 1]
 
-            if (currentBlock.hash !== currentBlock.calculateHash() ||
+            if (!currentBlock.hasValidTransactions() ||
+                currentBlock.hash !== currentBlock.calculateHash() ||
                 currentBlock.previousHash !== previousBlock.hash) {
                 return false
             }
@@ -93,16 +139,3 @@ class Blockchain {
         return true
     }
 }
-
-let agamCoin = new Blockchain()
-agamCoin.createTransaction(new Transaction('address1', 'address2', 100))
-agamCoin.createTransaction(new Transaction('address2', 'address1', 50))
-
-console.log('\nStarting the miner...')
-agamCoin.minePendingTransactions('raja-address')
-console.log('\nBalance of raja-address is', agamCoin.getBalanceOfAddress('raja-address'))
-
-console.log('\nStarting the miner again...')
-agamCoin.minePendingTransactions('raja-address')
-console.log('\nBalance of raja-address is', agamCoin.getBalanceOfAddress('raja-address'))
-
